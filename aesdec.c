@@ -18,7 +18,14 @@ int main(int argc, char ** argv) {
 		return ret;
 	}
 
-	uint8_t salt[CHUNKSIZE];
+	uint8_t iv[IVSIZE];
+	if (!fread(iv, sizeof(iv), 1, stdin)) {
+		perror("Failed to read random iv");
+		memset(password, 0, sizeof(password));
+		return 1;
+	}
+	
+	uint8_t salt[SALTSIZE];
 	if (!fread(salt, sizeof(salt), 1, stdin)) {
 		perror("Failed to read random salt");
 		memset(password, 0, sizeof(password));
@@ -26,7 +33,7 @@ int main(int argc, char ** argv) {
 	}
 
 	mbedtls_gcm_context aesgcm;
-	ret = prepare_aes(password, salt, &aesgcm, MBEDTLS_GCM_DECRYPT);
+	ret = prepare_aes(password, salt, iv, &aesgcm, MBEDTLS_GCM_DECRYPT);
 	if (ret) {
 		return ret;
 	}

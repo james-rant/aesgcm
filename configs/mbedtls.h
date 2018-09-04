@@ -17,7 +17,7 @@
 
 // PBKDF2 for pre-shared key to AES key derivation.
 #define MBEDTLS_MD_C
-#define MBEDTLS_SHA512_C
+#define MBEDTLS_SHA256_C
 #define MBEDTLS_PKCS5_C
 
 // Every modern processor has SSE2. Fuck backwards compatibility.

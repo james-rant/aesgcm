@@ -19,13 +19,6 @@
 #include <io.h>
 #endif
 
-#pragma pack(push, 1)
-struct aes256_key_pair {
-	uint8_t key[32];
-	uint8_t iv[16];
-};
-#pragma pack(pop)
-
 void mbedtls_perror(const char * message, int ret) {
 	char errortxt[256];
 	mbedtls_strerror(ret, errortxt, sizeof(errortxt));
@@ -90,10 +83,10 @@ int initialize(int argc, char ** argv, char * password) {
 	return 0;
 }
 
-int derive_keys(const char * pass, const uint8_t * salt, struct aes256_key_pair * keys) {
-    const mbedtls_md_info_t * mdinfo = mbedtls_md_info_from_type(MBEDTLS_MD_SHA512);
+int derive_key(const char * pass, const uint8_t * salt, uint8_t * key) {
+    const mbedtls_md_info_t * mdinfo = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
 	if (mdinfo == NULL) {
-		fprintf(stderr, "SHA-512 lookup failed in mbed TLS\n");
+		fprintf(stderr, "SHA-256 lookup failed in mbed TLS\n");
 		return 1;
 	}
 
@@ -110,9 +103,9 @@ int derive_keys(const char * pass, const uint8_t * salt, struct aes256_key_pair 
 	ret = mbedtls_pkcs5_pbkdf2_hmac(
 		&mdctx, // Context
 		(uint8_t *) pass, strlen(pass), // Password
-		salt, CHUNKSIZE, // Salt
+		salt, SALTSIZE, // Salt
 		100000, // Number of iterations
-		sizeof(*keys), (uint8_t *) keys // Generated keys
+		32, key // Generated keys
 	);
 
 	mbedtls_md_free(&mdctx);
@@ -125,9 +118,9 @@ int derive_keys(const char * pass, const uint8_t * salt, struct aes256_key_pair 
 	return 0;
 }
 
-int prepare_aes(char * pass, const uint8_t * salt, mbedtls_gcm_context * aesgcm, int operation) {
-	struct aes256_key_pair keypair;
-	int ret = derive_keys(pass, salt, &keypair);
+int prepare_aes(char * pass, const uint8_t * salt, const uint8_t * iv, mbedtls_gcm_context * aesgcm, int operation) {
+	uint8_t key[32];
+	int ret = derive_key(pass, salt, key);
 
 	// We no longer need the password - clear it ASAP
 	memset(pass, 0, MAXPASSLEN);
@@ -141,26 +134,26 @@ int prepare_aes(char * pass, const uint8_t * salt, mbedtls_gcm_context * aesgcm,
 	ret = mbedtls_gcm_setkey(
 		aesgcm,
 		MBEDTLS_CIPHER_ID_AES,
-		keypair.key,
-		sizeof(keypair.key) * 8
+		key,
+		256
 	);
 
 	if (ret) {
 		mbedtls_perror("Failed to initialize AES GCM context", ret);
-		memset(&keypair, 0, sizeof(keypair));
+		memset(key, 0, 32);
 		return 1;
 	}
 
 	ret = mbedtls_gcm_starts(
 		aesgcm,
 		operation,
-		keypair.iv,
-		sizeof(keypair.iv),
-		NULL, 0
+		iv,
+		12,
+		iv, 12
 	);
 
 	// We no longer need the keypair either - nuke it too
-	memset(&keypair, 0, sizeof(keypair));
+	memset(key, 0, 32);
 
 	if (ret) {
 		mbedtls_perror("Failed to start AES GCM operation", ret);
